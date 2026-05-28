@@ -7,7 +7,7 @@ from app.db.session import get_main_db
 from app.models.order import Order, OrderItem
 from app.models.cart import CartItem
 from app.models.user import User
-from app.schemas.order import OrderOut, OrderCreate, OrderStatusUpdate
+from app.schemas.order import OrderOut, OrderCreate, OrderStatusUpdate, AdminOrderOut
 from app.core.security import get_current_active_user
  
 router = APIRouter()
@@ -60,6 +60,41 @@ def list_orders(
         .order_by(Order.created_at.desc()).all()
  
  
+@router.get("/admin/all", response_model=List[AdminOrderOut])
+def list_all_orders(
+    db: Session = Depends(get_main_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    orders = db.query(Order).order_by(Order.created_at.desc()).all()
+    result = []
+    for order in orders:
+        order_dict = {
+            "id": order.id,
+            "user_id": order.user_id,
+            "status": order.status,
+            "total_amount": order.total_amount,
+            "delivery_address": order.delivery_address,
+            "created_at": order.created_at,
+            "user_name": order.user.full_name if order.user else None,
+            "user_email": order.user.email if order.user else None,
+            "items": [
+                {
+                    "id": item.id,
+                    "product_id": item.product_id,
+                    "product_name": item.product.name if item.product else None,
+                    "quantity": item.quantity,
+                    "unit_price": float(item.unit_price),
+                    "subtotal": float(item.subtotal),
+                }
+                for item in order.items
+            ],
+        }
+        result.append(AdminOrderOut(**order_dict))
+    return result
+
+
 @router.get("/{order_id}", response_model=OrderOut)
 def get_order(
     order_id: UUID,

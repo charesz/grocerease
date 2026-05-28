@@ -8,6 +8,7 @@ from app.models.order import OrderStatus
 class OrderItemOut(BaseModel):
     id: int
     product_id: UUID
+    product_name: Optional[str] = None
     quantity: int
     unit_price: float
     subtotal: float
@@ -35,3 +36,8 @@ class OrderOut(BaseModel):
  
     class Config:
         from_attributes = True
+
+
+class AdminOrderOut(OrderOut):
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None

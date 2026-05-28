@@ -585,6 +585,29 @@
     .promo-strip { flex-direction: column; text-align: center; }
   }
 
+  /* ── ORDER MANAGEMENT ── */
+  .order-filter-group { display:flex; gap:6px; flex-wrap:wrap; }
+  .order-filter-btn { padding:7px 14px; border-radius:20px; border:1.5px solid var(--border); background:var(--bg); color:var(--text-muted); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; }
+  .order-filter-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .order-filter-btn:hover:not(.active) { border-color:var(--primary); color:var(--primary); }
+  .status-badge { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .status-pending    { background:#fef3c7; color:#b45309; }
+  .status-confirmed  { background:#dbeafe; color:#1d4ed8; }
+  .status-out_for_delivery { background:#ede9fe; color:#6d28d9; }
+  .status-delivered  { background:#dcfce7; color:#15803d; }
+  .status-cancelled  { background:#fee2e2; color:#dc2626; }
+  .order-actions-group { display:flex; gap:6px; flex-wrap:wrap; }
+  .btn-status { border:none; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; transition:all .2s; }
+  .btn-confirm   { background:#dbeafe; color:#1d4ed8; }
+  .btn-dispatch  { background:#ede9fe; color:#6d28d9; }
+  .btn-deliver   { background:#dcfce7; color:#15803d; }
+  .btn-cancel    { background:#fee2e2; color:#dc2626; }
+  .btn-confirm:hover  { background:#1d4ed8; color:#fff; }
+  .btn-dispatch:hover { background:#6d28d9; color:#fff; }
+  .btn-deliver:hover  { background:#15803d; color:#fff; }
+  .btn-cancel:hover   { background:#dc2626; color:#fff; }
+  .order-items-preview { font-size:12px; color:var(--text-muted); margin-top:3px; }
+
   /* ── REPORTING DASHBOARD ── */
   .report-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
   .kpi-card { background:var(--card); border-radius:12px; padding:20px 24px; box-shadow:0 1px 4px rgba(0,0,0,.07); }
@@ -914,6 +937,7 @@
     <!-- Tab bar -->
     <div class="admin-tabs">
       <button class="admin-tab active" id="tabProducts" onclick="adminTab('products')">Products</button>
+      <button class="admin-tab" id="tabOrders" onclick="adminTab('orders')">🛒 Orders</button>
       <button class="admin-tab" id="tabCategories" onclick="adminTab('categories')">Categories</button>
       <button class="admin-tab" id="tabReports" onclick="adminTab('reports')">📊 Reports</button>
     </div>
@@ -925,6 +949,22 @@
         <button class="btn admin-add-btn" onclick="openProductModal()">+ Add Product</button>
       </div>
       <div id="adminProductTable"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- ── ORDERS TAB ── -->
+    <div id="adminOrdersSection" style="display:none">
+      <div class="admin-toolbar">
+        <div class="order-filter-group">
+          <button class="order-filter-btn active" data-status="all" onclick="setOrderFilter(this,'all')">All</button>
+          <button class="order-filter-btn" data-status="pending" onclick="setOrderFilter(this,'pending')">Pending</button>
+          <button class="order-filter-btn" data-status="confirmed" onclick="setOrderFilter(this,'confirmed')">Confirmed</button>
+          <button class="order-filter-btn" data-status="out_for_delivery" onclick="setOrderFilter(this,'out_for_delivery')">Out for Delivery</button>
+          <button class="order-filter-btn" data-status="delivered" onclick="setOrderFilter(this,'delivered')">Delivered</button>
+          <button class="order-filter-btn" data-status="cancelled" onclick="setOrderFilter(this,'cancelled')">Cancelled</button>
+        </div>
+        <button class="btn admin-add-btn" onclick="loadAdminOrders()" style="background:var(--bg);color:var(--text);border:1.5px solid var(--border);">↻ Refresh</button>
+      </div>
+      <div id="adminOrderTable"><div class="loading-center"><div class="spinner"></div></div></div>
     </div>
 
     <!-- ── CATEGORIES TAB ── -->
@@ -1487,15 +1527,110 @@ async function loadAdminPanel() {
 }
 
 function adminTab(tab) {
-  document.getElementById('adminProductsSection').style.display = tab === 'products' ? '' : 'none';
-  document.getElementById('adminCategoriesSection').style.display = tab === 'categories' ? '' : 'none';
-  document.getElementById('adminReportsSection').style.display = tab === 'reports' ? '' : 'none';
+  document.getElementById('adminProductsSection').style.display  = tab === 'products'  ? '' : 'none';
+  document.getElementById('adminOrdersSection').style.display    = tab === 'orders'    ? '' : 'none';
+  document.getElementById('adminCategoriesSection').style.display= tab === 'categories'? '' : 'none';
+  document.getElementById('adminReportsSection').style.display   = tab === 'reports'   ? '' : 'none';
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-  const tabId = tab === 'products' ? 'tabProducts' : tab === 'categories' ? 'tabCategories' : 'tabReports';
-  document.getElementById(tabId).classList.add('active');
-  if (tab === 'products') loadAdminProducts();
+  const tabMap = { products:'tabProducts', orders:'tabOrders', categories:'tabCategories', reports:'tabReports' };
+  document.getElementById(tabMap[tab]).classList.add('active');
+  if (tab === 'products')   loadAdminProducts();
+  if (tab === 'orders')     loadAdminOrders();
   if (tab === 'categories') loadAdminCategories();
-  if (tab === 'reports') loadReportsDashboard();
+  if (tab === 'reports')    loadReportsDashboard();
+}
+
+// ── ORDER MANAGEMENT ──
+let adminAllOrders = [];
+let currentOrderFilter = 'all';
+
+async function loadAdminOrders() {
+  const tbl = document.getElementById('adminOrderTable');
+  tbl.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  try {
+    // Admin fetches all orders via a dedicated endpoint
+    adminAllOrders = await api('GET', '/orders/admin/all');
+    renderAdminOrderTable();
+  } catch(e) {
+    tbl.innerHTML = '<p style="color:red;padding:16px;">' + e.message + '</p>';
+  }
+}
+
+function setOrderFilter(btn, status) {
+  currentOrderFilter = status;
+  document.querySelectorAll('.order-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAdminOrderTable();
+}
+
+function renderAdminOrderTable() {
+  const filtered = currentOrderFilter === 'all'
+    ? adminAllOrders
+    : adminAllOrders.filter(o => o.status === currentOrderFilter);
+  const tbl = document.getElementById('adminOrderTable');
+  if (!filtered.length) {
+    tbl.innerHTML = '<p style="color:var(--text-muted);padding:24px;text-align:center;">No orders found.</p>';
+    return;
+  }
+  tbl.innerHTML = `
+  <table class="admin-table">
+    <thead><tr>
+      <th>Order ID</th>
+      <th>Customer</th>
+      <th>Items</th>
+      <th>Total</th>
+      <th>Date</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody>
+      ${filtered.map(o => {
+        const shortId = o.id.substring(0,8).toUpperCase();
+        const date = new Date(o.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+        const itemsSummary = o.items ? o.items.map(i => `${i.quantity}× ${i.product_name||'Item'}`).join(', ') : '—';
+        const actions = getOrderActions(o);
+        return `<tr>
+          <td><span style="font-family:monospace;font-weight:700;font-size:13px;">#${shortId}</span></td>
+          <td><div style="font-weight:600">${o.user_name||o.user_email||'Customer'}</div>
+              <div style="font-size:12px;color:var(--text-muted);">${o.delivery_address?.substring(0,30)||''}…</div></td>
+          <td><div class="order-items-preview">${itemsSummary.substring(0,50)}${itemsSummary.length>50?'…':''}</div></td>
+          <td><strong>₱${parseFloat(o.total_amount).toFixed(2)}</strong></td>
+          <td style="font-size:13px;color:var(--text-muted);">${date}</td>
+          <td><span class="status-badge status-${o.status}">${formatStatus(o.status)}</span></td>
+          <td><div class="order-actions-group">${actions}</div></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+function formatStatus(status) {
+  return { pending:'Pending', confirmed:'Confirmed', out_for_delivery:'Out for Delivery', delivered:'Delivered', cancelled:'Cancelled' }[status] || status;
+}
+
+function getOrderActions(o) {
+  const btns = [];
+  if (o.status === 'pending') {
+    btns.push(`<button class="btn-status btn-confirm"  onclick="updateOrderStatus('${o.id}','confirmed')">✓ Confirm</button>`);
+    btns.push(`<button class="btn-status btn-cancel"   onclick="updateOrderStatus('${o.id}','cancelled')">✕ Cancel</button>`);
+  }
+  if (o.status === 'confirmed') {
+    btns.push(`<button class="btn-status btn-dispatch" onclick="updateOrderStatus('${o.id}','out_for_delivery')">🚚 Dispatch</button>`);
+    btns.push(`<button class="btn-status btn-cancel"   onclick="updateOrderStatus('${o.id}','cancelled')">✕ Cancel</button>`);
+  }
+  if (o.status === 'out_for_delivery') {
+    btns.push(`<button class="btn-status btn-deliver"  onclick="updateOrderStatus('${o.id}','delivered')">✓ Delivered</button>`);
+  }
+  if (btns.length === 0) btns.push(`<span style="color:var(--text-muted);font-size:13px;">—</span>`);
+  return btns.join('');
+}
+
+async function updateOrderStatus(orderId, newStatus) {
+  try {
+    await api('PUT', '/orders/' + orderId + '/status', { status: newStatus });
+    toast('Order updated to ' + formatStatus(newStatus));
+    await loadAdminOrders();
+  } catch(e) { toast(e.message, true); }
 }
 
 // ── REPORTING DASHBOARD ──
