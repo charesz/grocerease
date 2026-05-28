@@ -786,7 +786,7 @@
           <p>Shop fresh produce, pantry staples, and household essentials delivered straight to your door.</p>
           <div class="hero-actions">
             <button class="btn-hero primary" onclick="navigate('shop')">Shop Now</button>
-            <button class="btn-hero outline" onclick="navigate('auth')">Create Account</button>
+            <button class="btn-hero outline" id="heroCreateAccountBtn" onclick="navigate('auth')">Create Account</button>
           </div>
         </div>
         <div class="hero-visual">
@@ -1122,7 +1122,8 @@ function updateAuthUI() {
   document.getElementById('authBtn').style.display = authed ? 'none' : '';
   document.getElementById('logoutBtn').style.display = authed ? '' : 'none';
   document.getElementById('ordersNavBtn').style.display = authed ? '' : 'none';
-  document.getElementById('adminNavBtn').style.display = (authed && user && user.is_admin) ? '' : 'none';
+  const heroBtn = document.getElementById('heroCreateAccountBtn');
+  if (heroBtn) heroBtn.style.display = authed ? 'none' : '';
 }
 
 async function doLogin() {
