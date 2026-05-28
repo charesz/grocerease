@@ -1,21 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
- 
+import logging
+
 from app.db.session import get_main_db
 from app.models.order import Order, OrderItem
 from app.models.cart import CartItem
 from app.models.user import User
 from app.schemas.order import OrderOut, OrderCreate, OrderStatusUpdate, AdminOrderOut
 from app.core.security import get_current_active_user
- 
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def trigger_etl():
+    """Run ETL in the background so it doesn't slow down the API response."""
+    try:
+        from etl import run_etl
+        run_etl()
+        logger.info("ETL triggered successfully after order event.")
+    except Exception as e:
+        logger.error(f"ETL failed: {e}")
  
  
 @router.post("", response_model=OrderOut, status_code=201)
 def place_order(
     order_in: OrderCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_main_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -48,6 +62,7 @@ def place_order(
  
     db.commit()
     db.refresh(order)
+    background_tasks.add_task(trigger_etl)  # auto-update reports
     return order
  
  
@@ -113,6 +128,7 @@ def get_order(
 def update_order_status(
     order_id: UUID,
     status_in: OrderStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_main_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -124,4 +140,5 @@ def update_order_status(
     order.status = status_in.status
     db.commit()
     db.refresh(order)
+    background_tasks.add_task(trigger_etl)  # auto-update reports
     return order
