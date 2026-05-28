@@ -1407,7 +1407,12 @@ function renderCart() {
   const total = subtotal + delivery;
   const itemsHTML = cart.map(item => `
     <div class="cart-item">
-      <div class="cart-item-img">${getEmoji(item.product.category)}</div>
+      <div class="cart-item-img">
+        ${item.product.image_url
+          ? `<img src="${item.product.image_url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" onerror="this.parentElement.innerHTML='<span style=font-size:36px>${getEmoji(item.product.category)}</span>'" />`
+          : `<span style="font-size:36px">${getEmoji(item.product.category)}</span>`
+        }
+      </div>
       <div class="cart-item-info">
         <div class="cart-item-name">${item.product.name}</div>
         <div class="cart-item-cat">${item.product.category?.name || 'General'} · ₱${parseFloat(item.product.price).toFixed(2)} each</div>
